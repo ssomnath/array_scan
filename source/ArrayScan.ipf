@@ -8,26 +8,10 @@
 // Updating the name will update the rest of the details automatically in the following function
 // Name: UserChannelNameFunc("UserCalcName_0",NaN,"Vcant",GlobalStrings[%UserCalcName][%Value])
 
-function My2DArray()
-	Variable xx = 0
-	Variable yy = 0
-	Make/O /N=(3,3) /D mydata
-	for(xx=0;xx<3;xx = xx+1)
-		for(yy=0;yy<3;yy= yy+1)	
-			mydata[xx][yy] = xx + yy
-		endfor							
-	endfor	
-	Display mydata
-end //End My2DArray
-
-
-
-
-
 
 //Simplest version of a scan using the DAQ
 //Requires an external function generator
-Function MyScan_v1()
+Function DAQTestScan()
 
 	Variable errorCode
 	
@@ -48,10 +32,7 @@ End //MyScan end
 
 //Simplest version of a scan using the DAQ
 //Requires an external function generator
-// Modification of v1: Instead of a 100 long wave, a 10 by 10 wave
-// is chosen. The data was noted to be still being acquired
-// filling COLUMNWISE contrary to common knowledge
-Function MyScan_v3()
+Function SingleChannelScan()
 
 	Variable errorCode
 	
@@ -65,7 +46,7 @@ Function MyScan_v3()
 	//Print ScanRate
 	
 	Variable SampleTime = 1/(ScanRate*2.5*ScanPoints)
-	print sampleTime
+	//print sampleTime
 	Variable SampleNum	= 2.5*ScanPoints
 	NewDataFolder/O/S root:Packages:ArrayScan
 	Make/O/N=(SampleNum,ScanLines) Wave0// /O overwrites existing waves
@@ -73,43 +54,29 @@ Function MyScan_v3()
 	SetScale/P x, 0,SampleTime, "s", Wave0 
 		
 	DAQmx_Scan/DEV="Dev1"/BKG WAVES="Wave0, 0;";AbortOnRTE
-
 	
-	Display Wave0
+	//Display Wave0
 	
-End //MyScan_v3 end
+End //SingleChannelScan end
 
-
-
-
-// Execute body code until continue test is FALSE
-// More robust scan mode using the protective try-catch block
-Function MyScan_v2()
+Function TwoChannelScan()
 
 	Variable errorCode
 	
-	Make/O/N=100 Wave0// /O overwrites existing waves
-	SetScale/P x, 0,0.1, "s", Wave0 
-		
-	try
-		DAQmx_Scan/DEV="Dev1"/BKG WAVES="Wave0, 0;";AbortOnRTE
-		errorCode = fDAQmx_ScanWait("device");AbortOnValue errorcode!=0, 1
-		
-	catch
+	Wave scanmastervariables = root:Packages:MFP3D:Main:Variables:MasterVariablesWave
 	
-		//if (V_AbortCode == -4)
-			//print "Error starting scanning operation"
-			//Variable dummy=GetRTError(1) // to clear the error condition
-			
-		//elseif (V_AbortCode == 1)
-			//print "Error executing fDAQmx_ScanWait"
-			
-		//endif
-		
-		print fDAQmx_ErrorString()
-		
-	endtry
+	Variable scanpoints = scanmastervariables[7]
+	Variable scanlines = scanmastervariables[8]
+	Variable scanrate = scanmastervariables[3]
 	
-	Display Wave0
+	Variable SampleTime = 1/(ScanRate*2.5*ScanPoints)
+	Variable SampleNum	= 2.5*ScanPoints
 	
-End //MyScan_v2 end
+	NewDataFolder/O/S root:Packages:ArrayScan
+	
+	Make/O/N=(SampleNum,ScanLines) Wave0, Wave1// /O overwrites existing waves
+	SetScale/P x, 0,SampleTime, "s", Wave0, Wave1
+		
+	DAQmx_Scan/DEV="Dev1"/BKG WAVES="Wave0, 0; Wave1, 1;";AbortOnRTE
+	
+End //TwoChannelScan end
