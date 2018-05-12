@@ -3,17 +3,45 @@
 
 // Pending tasks:
 // Top Priority:
-// 2. Learn how to get some data into an existing ibw file. 
-// 2. Save cleaned data into clean waves
-// 3. Get the data into an ibw file.
+// 1. Save cleaned data into clean waves
+// 2. Create UI
+// 3. Figure out when a new wave needs to be created for next frame (regular / frame up / down)
+
 // Second Priority
-// 2. Figure out when a new wave needs to be created for next frame (regular / frame up / down)
+// 1. Learn how to get some data into an existing ibw file. 
+// 2. Get the data into an ibw file.
+
+// Tips:
+// MakePAnel("ARHack")
 
 // Saving subsequent images:
 // Make /N=(wavesize) wave0
 // Duplicate/O wave0, $("Y"+name), $("X"+name)
 //Wave Ywave = $("Y"+name)
 //	killwaves wave0
+
+Function setupARCallbackHacks()
+	ARCheckFunc("ARUserCallbackMasterCheck_1",1)
+	ARCheckFunc("ARUserCallbackImageScanCheck_1",1)
+	ARCheckFunc("ARUserCallbackImageDoneCheck_1",1)
+	
+	ARCallbackSetVarFunc("ARUserCallbackImageDoneSetVar_1",NaN,"ScanTerminateCallback","GeneralVariablesDescription[%ARUserCallbackImageDone][%Description]")
+	ARCallbackSetVarFunc("ARUserCallbackImageScanSetVar_1",NaN,"ScanCompleteCallback","GeneralVariablesDescription[%ARUserCallbackImageScan][%Description]")
+End
+
+Function cleanupARHacks()
+	ARCheckFunc("ARUserCallbackMasterCheck_1",0)
+	ARCheckFunc("ARUserCallbackImageScanCheck_1",0)
+	ARCheckFunc("ARUserCallbackImageDoneCheck_1",0)
+End
+
+Function ScanTerminateCallback()
+	print "Last scan completed"
+End
+
+Function ScanCompleteCallback()
+	print "Scan completed. Moving to next scan"
+End
 
 //Simplest version of a scan using the DAQ
 //Requires an external function generator
