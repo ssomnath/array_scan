@@ -4,9 +4,14 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////// VERSION LOG ////////////////////////////////////////////////////////////////////////////////
 
+//-------version 1.8---------
+// Replaced the in-line scan end codes in scanmaster with image end callbacks.
+// Still don't have a solution for subsequent scans or Stopped scans.
+
 //-------version 1.7---------
 // Took care of the data writing bug.
-// Stable release. Allows ONE scan only
+// Stable release. 
+// Allows ONE scan only
 
 //------- version 1.6---------
 // allows five channels of information to be read from the DAQ
@@ -16,19 +21,20 @@
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-
 // Pending tasks:
 // Top Priority:
-//
-// 1. Check a back-to-back scan to see if the data is written over in the raw waves
+// 1. Replace scan interactions with callbacks
 
 // Low Priority
-// 1. Learn how to get some data into an existing ibw file. 
-// 2. Get the data into an ibw file.
+// 1. Enable averaging to reduce noise
+// 2. Learn how to get some data into an existing ibw file. 
+// 3. Get the data into an ibw file.
 
 // Tips:
 // MakePAnel("ARHack")
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Menu "Macros"
 	"Array Scan", ArrayScanDriver()
@@ -100,17 +106,27 @@ Function setupARCallbackHacks()
 	// MakePanelProc("ARCallbackPanelButton_1")
 	
 	ARCheckFunc("ARUserCallbackMasterCheck_1",1)
+	//ARCheckFunc("ARUserCallbackImageGoCheck_1",1)
 	ARCheckFunc("ARUserCallbackImageScanCheck_1",1)
 	ARCheckFunc("ARUserCallbackImageDoneCheck_1",1)
 	
-	ARCallbackSetVarFunc("ARUserCallbackImageDoneSetVar_1",NaN,"WriteDataToFile","GeneralVariablesDescription[%ARUserCallbackImageDone][%Description]")
-	ARCallbackSetVarFunc("ARUserCallbackImageScanSetVar_1",NaN,"WriteDataToFile","GeneralVariablesDescription[%ARUserCallbackImageScan][%Description]")
+	//ARCallbackSetVarFunc("ARUserCallbackImageGoSetVar_1",NaN,"StartDataAcquisition","GeneralVariablesDescription[%ARUserCallbackImageGo][%Description]")//IMAGE start
+	ARCallbackSetVarFunc("ARUserCallbackImageScanSetVar_1",NaN,"WriteDataToFile","GeneralVariablesDescription[%ARUserCallbackImageScan][%Description]")//Scan finish
+	ARCallbackSetVarFunc("ARUserCallbackImageDoneSetVar_1",NaN,"StopAcquiringData","GeneralVariablesDescription[%ARUserCallbackImageDone][%Description]")//LastScan
 End
 
 Function cleanupARHacks()
 	ARCheckFunc("ARUserCallbackMasterCheck_1",0)
+	//ARCheckFunc("ARUserCallbackImageGoCheck_1",0)
 	ARCheckFunc("ARUserCallbackImageScanCheck_1",0)
 	ARCheckFunc("ARUserCallbackImageDoneCheck_1",0)
+End
+
+Function StopAcquiringData()
+	// Only after last scan.
+	print "DAQmx stopped acquiring data"
+	fDAQmx_ScanStop("Dev1")
+	WriteDataToFile()
 End
 
 Function StartDataAcquisition()
@@ -149,12 +165,7 @@ End
 Function UserCalcInterface(RowIndex,ColIndex)
 	
 	Variable RowIndex, ColIndex
-	
-	//Here we can grab the important data from the raw waves 
-	// and place it in the waves
-	// One obvious problem is how the subsequent frames are going to be stored
-	// Need to think about using Wave handles and indices and naming waves on the go
-	
+		
 	String dfSave = getDataFolder(1)
 	
 	SetDataFolder root:Packages:ArrayScan
@@ -171,9 +182,7 @@ Function UserCalcInterface(RowIndex,ColIndex)
 End // End function UserCalcInterface
 
 Function HackRealTimeNamePanel()
-	// Notes to self:
-// The user calculated function can be derived from :
-// 
+
 	Variable popnum = WhichListItem("ArrayUserCalc", GetUserCalculatedFuncList())
 
 	if(popnum < 0)
@@ -276,16 +285,17 @@ Function WriteImageToDisk(index)
 	// 5. Kill the trace and retrace temporary waves:
 	killwaves Trace, Retrace
 	
+	// 6. Try restarting DAQ scan now. God knows how inaccurate it will be
+	fDAQmx_ScanStop("Dev1")
+	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
+	//print "DAQ scan restarted"
+	
 	SetDataFolder dfSave
 End 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////// ANCILLARY FUNCTIONS   /////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-Function searchForDAQs()
-	print fDAQmx_DeviceNames()
-End
 
 Function CopyMyWave(newname)
 	String NewName
