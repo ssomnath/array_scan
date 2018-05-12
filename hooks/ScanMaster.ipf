@@ -67,6 +67,7 @@ function DoScanFunc(ctrlName)			//the scanning function
 			// cut off voltage supply to circuit.
 			td_wv("Output.A",0.5)
 			
+			print "DAQmx stopped acquiring data"
 			ArrayInterfacer("fDAQmx_ScanStop(\"Dev1\");");
 			
 			//////////////////////////////// end of code addition by Suhas /////////////////////////////////////////////
@@ -521,7 +522,7 @@ end //DoScanFunc
 Function ArrayInterfacer(message)
 	String message
 	
-	DoWindow/F ArrayImagingPanel
+	DoWindow/F ArrayScanPanel
 	if(V_flag != 0)
 		execute(message)
 	endif
@@ -910,8 +911,8 @@ function OutAndTrigger(decimation,interpolation,ScanDown,ScanLines)		//This actu
 	// Warning: This requires the arrayscan to be called at all times
 	// Make this run only if the corresponding function is compiled
 	// Make this trigger a variable function. So that functions may be modified
-	//ArrayInterfacer("TwoChannelScan()");
-	TwoChannelScan()
+	ArrayInterfacer("StartDataAcquisition()");
+	//TwoChannelScan()
 	/// End of modification by Suhas
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
