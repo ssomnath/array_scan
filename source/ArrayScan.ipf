@@ -1,13 +1,19 @@
 #pragma rtGlobals=1		// Use modern global access method.
 #include <NIDAQmxWaveScanProcs>
 
-// Notes to self:
-// The user calculated function can be derived from :
-// GetUserCalculatedFuncList()
-// Use the code from the ThermalImaging window setup function for tips
-// Updating the name will update the rest of the details automatically in the following function
-// Name: UserChannelNameFunc("UserCalcName_0",NaN,"Vcant",GlobalStrings[%UserCalcName][%Value])
+// Pending tasks:
+// Top Priority:
+// 2. Learn how to get some data into an existing ibw file. 
+// 2. Save cleaned data into clean waves
+// 3. Get the data into an ibw file.
+// Second Priority
+// 2. Figure out when a new wave needs to be created for next frame (regular / frame up / down)
 
+// Saving subsequent images:
+// Make /N=(wavesize) wave0
+// Duplicate/O wave0, $("Y"+name), $("X"+name)
+//Wave Ywave = $("Y"+name)
+//	killwaves wave0
 
 //Simplest version of a scan using the DAQ
 //Requires an external function generator
@@ -28,10 +34,7 @@ Function DAQTestScan()
 End //MyScan end
 
 
-
-
-//Simplest version of a scan using the DAQ
-//Requires an external function generator
+//Single Channel Scan setup
 Function SingleChannelScan()
 
 	Variable errorCode
@@ -72,11 +75,108 @@ Function TwoChannelScan()
 	Variable SampleTime = 1/(ScanRate*2.5*ScanPoints)
 	Variable SampleNum	= 2.5*ScanPoints
 	
+	String dfSave = getDataFolder(1)
+	
 	NewDataFolder/O/S root:Packages:ArrayScan
 	
+	// Don't know how necessary this is. But Killing waves might enable
+	// scanning with (newly) reduced scan sizes
+	//killWaves Wave0, Wave1
+	
 	Make/O/N=(SampleNum,ScanLines) Wave0, Wave1// /O overwrites existing waves
+	//Make/O/N=(scanpoints,scanlines,2) Clean0, Clean1// Space to save the retrace and the trace
+	
 	SetScale/P x, 0,SampleTime, "s", Wave0, Wave1
 		
 	DAQmx_Scan/DEV="Dev1"/BKG WAVES="Wave0, 0; Wave1, 1;";AbortOnRTE
 	
+	SetDataFolder dfSave;
+	
 End //TwoChannelScan end
+
+Function HackRealTimeNamePanel()
+	// Notes to self:
+// The user calculated function can be derived from :
+// 
+	Variable popnum = WhichListItem("ArrayUserCalc", GetUserCalculatedFuncList())
+
+	if(popnum < 0)
+		// Such a function does not exist or is already chosen?
+		DoAlert 0, "ArrayUserCalc funciton not found in UserCalculated.ipf";
+		return -1;
+	endif
+	
+	// Select ArrayUserCalc:
+	ChannelPopFunc("UserCalcFuncPop_0",PopNum+1,"ArrayUserCalc")
+	
+	//Set the Units to Volts:
+	SetChannelUnitSetVarFunc("UserCalcUnitSetVar_0",NaN,"V","GlobalStrings[%UserCalcUnit][%Value]")
+	
+	//Give this a Name
+	UserChannelNameFunc("UserCalcName_0",NaN,"Array","GlobalStrings[%UserCalcName][%Value]")
+	
+	//Now set up the UserCalcWindow
+	popnum = WhichListItem("Array", DataTypeFunc(5))
+	if(popnum < 0)
+		// Array already being displayed
+		// dont bother
+		return -1
+	endif
+	SetDataTypePopupFunc("Channel5DataTypePopup_5",popNum,"Array") // sets the channel acquired into the graph:
+	SetPlanefitPopupFunc("Channel5RealPlanefitPopup_5",4,"Masked Line") // for the live flatten
+	SetPlanefitPopupFunc("Channel5SavePlanefitPopup_5",4,"Flatten 0") // for the save flatten
+	//ShowWhatPopupFunc("Channel5CapturePopup_5",4,"Both")
+
+End
+
+Function insertDataIntoIBW()
+	// 1. Cause a click in "Extract Layer"
+	// Do the following 5 times
+	//	a. Copy data into root:Images:LayerData (use code from SmartLitho)
+	//	b. Cause a click on the "Do It" button in the Insert layer menu.
+	
+	String dfSave = getDataFolder(1)
+	
+	//ExtractLayer();
+	
+	SetDataFolder root:Packages:ArrayScan
+	Wave Wave1
+	
+	SetDataFolder root:Images
+	
+	//Replace LayerData with Wave1
+	Duplicate/O Wave1, LayerData
+	
+	//Insert the layer:
+	InsertLayerButtonProc("blah")
+	//InsertLayerChoose()
+	
+	SetDataFolder dfSave
+End
+
+// Thus function will be called by the UserCalculated.ipf function
+// Gives a little more freedom in portability of the data filtering code
+Function UserCalcInterface(RowIndex,ColIndex)
+	
+	Variable RowIndex, ColIndex
+	
+	//Here we can grab the important data from the raw waves 
+	// and place it in the waves
+	// One obvious problem is how the subsequent frames are going to be stored
+	// Need to think about using Wave handles and indices and naming waves on the go
+	
+	String dfSave = getDataFolder(1)
+	
+	SetDataFolder root:Packages:ArrayScan
+		
+	Wave Wave0, Wave1
+	
+	// Currently not saving the truncated data in any new waves
+	
+	Variable retValue = Wave1[RowIndex][ColIndex]
+	
+	SetDataFolder dfSave;
+	
+	return retValue
+
+End // End function TwoChannelDisplayA
