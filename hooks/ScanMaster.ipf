@@ -67,8 +67,8 @@ function DoScanFunc(ctrlName)			//the scanning function
 			// cut off voltage supply to circuit.
 			td_wv("Output.A",0.5)
 			
-			//Replaced by callback
-			//ArrayInterfacer("fDAQmx_ScanStop(\"Dev1\");");
+			print "DAQmx Scan Stopped at ScanMaster"
+			ArrayInterfacer("fDAQmx_ScanStop(\"Dev1\");");
 			
 			//////////////////////////////// end of code addition by Suhas /////////////////////////////////////////////
 			////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

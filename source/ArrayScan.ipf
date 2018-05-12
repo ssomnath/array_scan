@@ -4,6 +4,12 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////// VERSION LOG ////////////////////////////////////////////////////////////////////////////////
 
+//------version 1.9---------
+// Optimized the callbacks and in-line calls
+// Subsequent scans now being saved successfully
+// Scan window does NOT show subsequent scan details unfortunately.
+// ARCallbacks and Usercalculated automatically called on panel display.
+
 //-------version 1.8---------
 // Replaced the in-line scan end codes in scanmaster with image end callbacks.
 // Still don't have a solution for subsequent scans or Stopped scans.
@@ -69,6 +75,7 @@ Function ArrayScanDriver()
 	Variable/G gDisplayCant = displayCant
 	
 	setupARCallbackHacks()
+	HackRealTimeNamePanel()
 	
 	Execute "ArrayScanPanel()"
 	
@@ -111,7 +118,7 @@ Function setupARCallbackHacks()
 	ARCheckFunc("ARUserCallbackImageDoneCheck_1",1)
 	
 	//ARCallbackSetVarFunc("ARUserCallbackImageGoSetVar_1",NaN,"StartDataAcquisition","GeneralVariablesDescription[%ARUserCallbackImageGo][%Description]")//IMAGE start
-	ARCallbackSetVarFunc("ARUserCallbackImageScanSetVar_1",NaN,"WriteDataToFile","GeneralVariablesDescription[%ARUserCallbackImageScan][%Description]")//Scan finish
+	ARCallbackSetVarFunc("ARUserCallbackImageScanSetVar_1",NaN,"ContinueScanning","GeneralVariablesDescription[%ARUserCallbackImageScan][%Description]")//Scan finish
 	ARCallbackSetVarFunc("ARUserCallbackImageDoneSetVar_1",NaN,"StopAcquiringData","GeneralVariablesDescription[%ARUserCallbackImageDone][%Description]")//LastScan
 End
 
@@ -120,6 +127,14 @@ Function cleanupARHacks()
 	//ARCheckFunc("ARUserCallbackImageGoCheck_1",0)
 	ARCheckFunc("ARUserCallbackImageScanCheck_1",0)
 	ARCheckFunc("ARUserCallbackImageDoneCheck_1",0)
+End
+
+Function ContinueScanning()
+	WriteDataToFile()
+	restartAcquisition()
+	
+	//fDAQmx_ScanStop("Dev1")
+	//StartDataAcquisition()
 End
 
 Function StopAcquiringData()
@@ -232,7 +247,22 @@ Function WriteDataToFile()
 	NVAR gBaseSuffix
 	gBaseSuffix = gBaseSuffix+1;
 	SetDataFolder dfSave;
+
+End
+
+Function restartAcquisition()
+	// Try restarting DAQ scan now
+	// Scanning is supposed to be continuous so theoretically this is the right place
+	// Matching accuracy or latency unknown / untested
 	
+	fDAQmx_ScanStop("Dev1")
+	// StartDataAcquisition()
+	String dfSave = getDataFolder(1)
+	SetDataFolder root:Packages:ArrayScan
+	//Wave RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
+	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
+	SetDataFolder dfSave;
+	print "DAQ scan restarted"
 End
 
 Function WriteImageToDisk(index)
@@ -284,11 +314,6 @@ Function WriteImageToDisk(index)
 	
 	// 5. Kill the trace and retrace temporary waves:
 	killwaves Trace, Retrace
-	
-	// 6. Try restarting DAQ scan now. God knows how inaccurate it will be
-	fDAQmx_ScanStop("Dev1")
-	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
-	//print "DAQ scan restarted"
 	
 	SetDataFolder dfSave
 End 
