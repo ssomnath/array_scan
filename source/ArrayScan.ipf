@@ -4,6 +4,10 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////// VERSION LOG ////////////////////////////////////////////////////////////////////////////////
 
+//-----version 2.0---------
+// Realtime display shows averaging
+// Manual averaging of data offline (txt files) is required
+
 //------version 1.9---------
 // Optimized the callbacks and in-line calls
 // Subsequent scans now being saved successfully
@@ -29,12 +33,10 @@
 
 // Pending tasks:
 // Top Priority:
-// 1. Replace scan interactions with callbacks
+
 
 // Low Priority
-// 1. Enable averaging to reduce noise
-// 2. Learn how to get some data into an existing ibw file. 
-// 3. Get the data into an ibw file.
+// 1. Learn how to get some data into an existing ibw file. 
 
 // Tips:
 // MakePAnel("ARHack")
@@ -76,6 +78,8 @@ Function ArrayScanDriver()
 	
 	setupARCallbackHacks()
 	HackRealTimeNamePanel()
+	
+	DoAlert 0, "Enable UserCalculated function: ArrayUserCalc"
 	
 	Execute "ArrayScanPanel()"
 	
@@ -137,9 +141,24 @@ Function ContinueScanning()
 	//StartDataAcquisition()
 End
 
+Function restartAcquisition()
+	// Try restarting DAQ scan now
+	// Scanning is supposed to be continuous so theoretically this is the right place
+	// Matching accuracy or latency unknown / untested
+	
+	fDAQmx_ScanStop("Dev1")
+	// StartDataAcquisition()
+	String dfSave = getDataFolder(1)
+	SetDataFolder root:Packages:ArrayScan
+	//Wave RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
+	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
+	SetDataFolder dfSave;
+	print "DAQ scan restarted"
+End
+
 Function StopAcquiringData()
 	// Only after last scan.
-	print "DAQmx stopped acquiring data"
+	print "DAQmx stopped acquiring data -> Last scan"
 	fDAQmx_ScanStop("Dev1")
 	WriteDataToFile()
 End
@@ -154,13 +173,18 @@ Function StartDataAcquisition()
 	Variable scanlines = scanmastervariables[8]
 	Variable scanrate = scanmastervariables[3]
 	
-	Variable SampleTime = 1/(ScanRate*2.5*ScanPoints)
-	// When Averaging is enabled, the sampleNum will be multiplied by that.
-	Variable SampleNum	= 2.5*ScanPoints
-	
 	String dfSave = getDataFolder(1)
 	
 	NewDataFolder/O/S root:Packages:ArrayScan
+	NVAR gAveraging
+	
+	if(gAveraging > 100 || gAveraging < 0)
+		gAveraging = 1;
+	endif;
+	
+	Variable SampleTime = 1/(ScanRate*2.5*ScanPoints*gAveraging)
+	// When Averaging is enabled, the sampleNum will be multiplied by that.
+	Variable SampleNum	= 2.5*ScanPoints*gAveraging
 			
 	//Redimension/N=(0) RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
 	Make/O/N=(SampleNum,ScanLines) RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
@@ -184,11 +208,20 @@ Function UserCalcInterface(RowIndex,ColIndex)
 	String dfSave = getDataFolder(1)
 	
 	SetDataFolder root:Packages:ArrayScan
-	NVAR gDisplayCant
+	NVAR gDisplayCant, gAveraging
 	
 	Wave chosenCant = $("RawCant"+num2str(gDisplayCant-1))
 	
-	Variable retValue = chosenCant[RowIndex][ColIndex]
+	// Average here:
+	// This is slow because it has to be done in realtime
+	// Perhaps realtime display can be disabled when not required.
+	Variable i=0;
+	Variable total = 0;
+	for(i=gAveraging*Rowindex; i<gAveraging*(RowIndex+1); i=i+1)
+		total = total + chosenCant[i][ColIndex]
+	endfor
+	
+	Variable retValue = total/gAveraging
 	
 	SetDataFolder dfSave;
 	
@@ -250,21 +283,6 @@ Function WriteDataToFile()
 
 End
 
-Function restartAcquisition()
-	// Try restarting DAQ scan now
-	// Scanning is supposed to be continuous so theoretically this is the right place
-	// Matching accuracy or latency unknown / untested
-	
-	fDAQmx_ScanStop("Dev1")
-	// StartDataAcquisition()
-	String dfSave = getDataFolder(1)
-	SetDataFolder root:Packages:ArrayScan
-	//Wave RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
-	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
-	SetDataFolder dfSave;
-	print "DAQ scan restarted"
-End
-
 Function WriteImageToDisk(index)
 	Variable index
 	
@@ -272,13 +290,13 @@ Function WriteImageToDisk(index)
 	SetDataFolder root:packages:ArrayScan
 	
 	SVAR gBaseName, gPathName
-	NVAR gBaseSuffix
+	NVAR gBaseSuffix//, gAveraging
 		
 	Wave chosenCant = $("RawCant"+num2str(index))
 	
 	
 	//1. Copy the correct contents of the raw wave into the trace and retrace waves
-	Variable scanpoints = DimSize(chosenCant, 0)/2.5;
+	Variable scanpoints = DimSize(chosenCant, 0)/(2.5)//*gAveraging);
 	Variable scanlines = DimSize(chosenCant, 1)
 	
 	Make/O/N=(scanpoints,scanlines) Trace, Retrace
@@ -296,6 +314,7 @@ Function WriteImageToDisk(index)
 	String basefilename = gBaseName + "_" + filesuffix + "_C" + num2str(index+1) + "_";
 		
 	//3. write to file
+	// It is faster to perform post processing of data offline than averaging before write.
 		//Flags:
 		// /C:	The folder specified by "path" is created if it does not already exist.
 		// /O	Overwrites the symbolic path if it exists.
