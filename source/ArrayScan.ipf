@@ -2,12 +2,17 @@
 #include <NIDAQmxWaveScanProcs>
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////// DESCRIPTION ////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////// VERSION LOG ////////////////////////////////////////////////////////////////////////////////
 
-// This version (1.6) allows five channels of information to be read from the DAQ
-// It also has a GUI and is well integrated with the Scan routines to start and stop the data
-// acquisition along with the scans
-// The time lag between the DAQ data acquisition and the scan start has been eliminated.
+//-------version 1.7---------
+// Took care of the data writing bug.
+// Stable release. Allows ONE scan only
+
+//------- version 1.6---------
+// allows five channels of information to be read from the DAQ
+// has a GUI 
+// well integrated with the Scan routines to start and stop the data acquisition along with the scans
+// time lag between the DAQ data acquisition and the scan start has been eliminated.
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -15,7 +20,7 @@
 
 // Pending tasks:
 // Top Priority:
-////// I am assuming that the DAQ will automatically REUSE the raw waves.
+//
 // 1. Check a back-to-back scan to see if the data is written over in the raw waves
 
 // Low Priority
@@ -84,15 +89,7 @@ Window ArrayScanPanel(): Panel
 
 	SetVariable sv_Averaging,pos={17,140},size={115,25},title="Averaging", limits={0,100,1}
 	SetVariable sv_Averaging, value=root:Packages:ArrayScan:gAveraging
-
-	//SetDrawEnv fsize= 13; SetDrawEnv fstyle= 4; DrawText 68,249, "Heating:"
-	//Button but_start,pos={24,259},size={49,20},title="Start", fstyle=1, proc=startImaging
-	//Button but_stop,pos={113,259},size={49,20},title="Stop", fstyle=1, proc=StopPID
-		
-	//ValDisplay vd_statusLED, value=str2num(root:packages:MFP3D:Main:PIDSLoop[%Status][5])
-	//ValDisplay vd_statusLED, mode=2, limits={-1,1,0}, highColor= (0,65280,0), zeroColor= (65280,65280,16384)
-	//ValDisplay vd_statusLED, lowColor= (65280,0,0), pos={87,262},size={15,15}, bodyWidth=15, barmisc={0,0}
-		
+	
 	SetDrawEnv fstyle= 1 
 	SetDrawEnv textrgb= (0,0,65280)
 	DrawText 16, 190, "Suhas Somnath, UIUC 2010"
@@ -133,7 +130,8 @@ Function StartDataAcquisition()
 	String dfSave = getDataFolder(1)
 	
 	NewDataFolder/O/S root:Packages:ArrayScan
-	
+			
+	//Redimension/N=(0) RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
 	Make/O/N=(SampleNum,ScanLines) RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
 	
 	SetScale/P x, 0,SampleTime, "s", RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
@@ -243,10 +241,11 @@ Function WriteImageToDisk(index)
 	//1. Copy the correct contents of the raw wave into the trace and retrace waves
 	Variable scanpoints = DimSize(chosenCant, 0)/2.5;
 	Variable scanlines = DimSize(chosenCant, 1)
+	
 	Make/O/N=(scanpoints,scanlines) Trace, Retrace
 	
-	Duplicate/O/R=(0.125*scanpoints,1.125*scanpoints-1) chosenCant, Trace
-	Duplicate/O/R=(1.375*scanpoints,2.375*scanpoints-1) chosenCant, Retrace
+	Duplicate/O/R=[0.125*scanpoints,1.125*scanpoints-1]chosenCant, Trace
+	Duplicate/O/R=[1.375*scanpoints,2.375*scanpoints-1] chosenCant, Retrace
 		
 	//2. Get the correct name of the file
 	String filesuffix =""
@@ -263,7 +262,7 @@ Function WriteImageToDisk(index)
 		// /O	Overwrites the symbolic path if it exists.
 		// /Q	Suppresses printing path information in the history
 		// /Z	Doesn't generate an error if the folder does not exist.
-	NewPath/O/Q/C Path1, gPathName
+	NewPath/O/Q/C Path1, gPathName+ gBaseName + "_" + filesuffix + ":"
 
 		// O - overwrite ok, J - tab limted
 	Save /O/J/P=Path1 Trace as (basefilename + "T.txt")
