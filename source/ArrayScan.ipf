@@ -4,6 +4,11 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////// VERSION LOG ////////////////////////////////////////////////////////////////////////////////
 
+//-----version 2.1---------
+// Slightly automated the insertion into ibw process
+// Code grabs the displayed gAveraging and averages the image itself
+// Layer must be created / inserted and kept ready for overwriting.
+
 //-----version 2.0---------
 // Realtime display shows averaging
 // Manual averaging of data offline (txt files) is required
@@ -44,7 +49,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Menu "Macros"
+Menu "UIUC"
 	"Array Scan", ArrayScanDriver()
 End
 
@@ -70,7 +75,7 @@ Function ArrayScanDriver()
 	Variable baseSuffix = NumVarOrDefault(":gBaseSuffix",0);
 	Variable/G gBaseSuffix = baseSuffix
 	
-	Variable avging = NumVarOrDefault(":gAveraging",1)
+	Variable avging = NumVarOrDefault(":gAveraging",8)
 	Variable/G gAveraging = avging
 	
 	Variable displayCant = NumVarOrDefault(":gDisplayCant",1)
@@ -89,13 +94,13 @@ End
 Window ArrayScanPanel(): Panel
 	
 	PauseUpdate; Silent 1		// building window...
-	NewPanel /K=1 /W=(485,145, 675,350) as "Array Scan Panel"
+	NewPanel /K=1 /W=(485,145, 765,450) as "Array Scan Panel"
 	SetDrawLayer UserBack
 	
-	SetVariable sv_PathName,pos={17,14},size={160,25},title="File Path"
+	SetVariable sv_PathName,pos={17,14},size={242,25},title="File Path"
 	SetVariable sv_PathName, value=root:Packages:ArrayScan:gPathName	
 	
-	SetVariable sv_ImageBaseName,pos={17,46},size={160,25},title="Base Name"
+	SetVariable sv_ImageBaseName,pos={17,46},size={242,25},title="Base Name"
 	SetVariable sv_ImageBaseName, value=root:Packages:ArrayScan:gBaseName	
 	
 	SetVariable sv_ImageOffset,pos={17,78},size={115,25},title="Base Suffix", limits={0,100,1}
@@ -107,9 +112,16 @@ Window ArrayScanPanel(): Panel
 	SetVariable sv_Averaging,pos={17,140},size={115,25},title="Averaging", limits={0,100,1}
 	SetVariable sv_Averaging, value=root:Packages:ArrayScan:gAveraging
 	
+	DrawText 16, 205, "Insert data into ibw:"
+	
+	SetVariable SV_name,pos={16,215},size={242,25},title="Image Name", disable=2
+	SetVariable SV_name,value= root:packages:MFP3D:Main:Display:LastTitle,live= 1
+	
+	Button bt_overwrite,pos={17,246},size={242,25},title="Browse for txt file & overwrite Img layer", proc=OverwriteLayer
+	
 	SetDrawEnv fstyle= 1 
 	SetDrawEnv textrgb= (0,0,65280)
-	DrawText 16, 190, "Suhas Somnath, UIUC 2010"
+	DrawText 102, 292, "Suhas Somnath, UIUC 2010"
 End	
 
 Function setupARCallbackHacks()
@@ -336,6 +348,101 @@ Function WriteImageToDisk(index)
 	
 	SetDataFolder dfSave
 End 
+
+Function OverwriteLayer(ctrlname): ButtonControl
+	String ctrlname
+	LoadWaveFromDisk()
+	
+	String dfSave = GetDataFolder(1)
+	
+	SetDataFolder root:packages:MFP3D:Main:Display
+	
+	SVAR LastTitle
+	Variable index = strsearch(LastTitle, " ", 0)
+	if(index < 0)
+		DoAlert 0, "No such Image!"
+		return 0;
+	endif
+	
+	String imgname = LastTitle[0,index-1]
+	Variable layernum = -1
+	
+	String GraphName = StringFromList(0,WinList(cOfflineBaseName+"*",";","WIN:1"))	//get the name of the top graph
+	if (strlen(GraphName) == 0)		//anything there?
+		DoAlert 0, "No such Image!"
+		return 0							//nope
+	endif
+	
+	String DataFolder, ImageName
+	GetGraphData(GraphName,DataFolder,ImageName,LayerNum)
+	
+	SetDataFolder dfSave
+	
+	FilterImage(ImageName,Layernum)
+
+End
+
+Function LoadWaveFromDisk()
+	String oldSaveFolder = GetDataFolder(1)
+	setdatafolder root:packages:ArrayScan
+	Variable refNum
+	String outputPath
+	Open /R /Z=2 /M="Select the text file containing the litho coordinates" refNum as ""
+	if(refNum == 0)
+		print "No file was open!"
+		//return -1
+	endif
+	if (V_flag == -1)
+		Print "Open cancelled by user."
+		return -1
+	endif
+	if (V_flag != 0)
+		DoAlert 0, "Error Opening file"
+		return V_flag
+	endif
+	outputPath = S_fileName
+	
+	print outputPath
+	
+	//Unless there is no other wave, this should load the wave as "wave0"
+	//J	Indicates that the file uses the delimited text format
+	//D	Creates double precision waves
+	//M	Loads data as matrix wave.
+	//A	"Auto-name and go" option <- fine for now
+	LoadWave/J/M/D/A=wave/K=0 outputPath
+	
+	SetDataFolder oldSaveFolder
+End
+	
+Function FilterImage(ImgName,Layernum)
+	String ImgName
+	Variable LayerNum
+	String dfSave = GetDataFolder(1)
+	setdatafolder root:packages:ArrayScan
+	
+	// Assume wave to be loaded is  called "wave0"
+	Wave wave0
+	NVAR gAveraging
+	Variable i, j, k, total, scanpoints, scanlines
+	scanpoints = (DimSize(wave0, 0))/gAveraging
+	scanlines = DimSize(wave0, 1)
+	//Make/O/N=(scanpoints,scanlines) cleanedWave
+	SetDataFolder root:Images
+	Wave chosenCant = $(ImgName)
+	for(j=0; j<scanlines; j=j+1)
+		for(i=0; i<scanpoints*gAveraging; i=i+gAveraging)
+			total = 0;
+			for(k=i; k<(i+gAveraging); k=k+1)
+				total = total + wave0[k][j]
+			endfor
+			//cleanedWave[i/gAveraging][j] = total/gAveraging
+			chosenCant[i/gAveraging][j][LayerNum] = total/gAveraging
+		endfor
+	endfor
+	
+	KillWaves  wave0
+	SetDataFolder dfSave
+End
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////// ANCILLARY FUNCTIONS   /////////////////////////////////////////////////////////
