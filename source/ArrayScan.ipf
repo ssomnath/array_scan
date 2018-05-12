@@ -1,12 +1,22 @@
 #pragma rtGlobals=1		// Use modern global access method.
 #include <NIDAQmxWaveScanProcs>
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////// DESCRIPTION ////////////////////////////////////////////////////////////////////////////////
+
+// This version (1.6) allows five channels of information to be read from the DAQ
+// It also has a GUI and is well integrated with the Scan routines to start and stop the data
+// acquisition along with the scans
+// The time lag between the DAQ data acquisition and the scan start has been eliminated.
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 // Pending tasks:
 // Top Priority:
-// 1. Save cleaned data into clean waves
 ////// I am assuming that the DAQ will automatically REUSE the raw waves.
-// 2. Learn how to switch and reuse waves
-// 3. Lookup how to write to files from SmartLitho
+// 1. Check a back-to-back scan to see if the data is written over in the raw waves
 
 // Low Priority
 // 1. Learn how to get some data into an existing ibw file. 
@@ -32,7 +42,10 @@ Function ArrayScanDriver()
 	// Create a data folder in Packages to store globals.
 	NewDataFolder/O/S root:packages:ArrayScan
 	
-	String basename = StrVarOrDefault(":gBaseName","Image_");
+	String pathname = StrVarOrDefault(":gPathName","C:Documents and Settings:somnath2:Desktop:RealTimeDataCapture:");
+	String/G gPathName = pathname
+	
+	String basename = StrVarOrDefault(":gBaseName","Image");
 	String/G gBaseName = basename
 	
 	Variable baseSuffix = NumVarOrDefault(":gBaseSuffix",0);
@@ -46,29 +59,31 @@ Function ArrayScanDriver()
 	
 	setupARCallbackHacks()
 	
-	// Create the control panel.
 	Execute "ArrayScanPanel()"
-	//Reset the datafolder to the root / previous folder
+	
 	SetDataFolder dfSave
 End
 
 Window ArrayScanPanel(): Panel
 	
 	PauseUpdate; Silent 1		// building window...
-	NewPanel /K=1 /W=(485,145, 675,325) as "Array Scan Panel"
+	NewPanel /K=1 /W=(485,145, 675,350) as "Array Scan Panel"
 	SetDrawLayer UserBack
 	
-	SetVariable sv_ImageBaseName,pos={16,14},size={160,25},title="Base Name"
+	SetVariable sv_PathName,pos={17,14},size={160,25},title="File Path"
+	SetVariable sv_PathName, value=root:Packages:ArrayScan:gPathName	
+	
+	SetVariable sv_ImageBaseName,pos={17,46},size={160,25},title="Base Name"
 	SetVariable sv_ImageBaseName, value=root:Packages:ArrayScan:gBaseName	
 	
-	SetVariable sv_ImageOffset,pos={17,46},size={115,25},title="Base Suffix", limits={0,100,1}
-	SetVariable sv_ImageOffset,value=root:Packages:ArrayScan:gBaseSuffix	
-
-	SetVariable sv_Averaging,pos={17,109},size={115,25},title="Averaging", limits={0,100,1}
-	SetVariable sv_Averaging, value=root:Packages:ArrayScan:gAveraging
+	SetVariable sv_ImageOffset,pos={17,78},size={115,25},title="Base Suffix", limits={0,100,1}
+	SetVariable sv_ImageOffset,value=root:Packages:ArrayScan:gBaseSuffix
 	
-	SetVariable sv_DisplayCant,pos={17,78},size={151,25},title="Display Cantilever", limits={1,5,1}
+	SetVariable sv_DisplayCant,pos={17,109},size={151,25},title="Display Cantilever", limits={1,5,1}
 	SetVariable sv_DisplayCant, value=root:Packages:ArrayScan:gDisplayCant
+
+	SetVariable sv_Averaging,pos={17,140},size={115,25},title="Averaging", limits={0,100,1}
+	SetVariable sv_Averaging, value=root:Packages:ArrayScan:gAveraging
 
 	//SetDrawEnv fsize= 13; SetDrawEnv fstyle= 4; DrawText 68,249, "Heating:"
 	//Button but_start,pos={24,259},size={49,20},title="Start", fstyle=1, proc=startImaging
@@ -80,7 +95,7 @@ Window ArrayScanPanel(): Panel
 		
 	SetDrawEnv fstyle= 1 
 	SetDrawEnv textrgb= (0,0,65280)
-	DrawText 16, 159, "Suhas Somnath, UIUC 2011"
+	DrawText 16, 190, "Suhas Somnath, UIUC 2010"
 End	
 
 Function setupARCallbackHacks()
@@ -124,6 +139,8 @@ Function StartDataAcquisition()
 	SetScale/P x, 0,SampleTime, "s", RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
 		
 	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
+	
+	print "DAQmx Data acquisition started"
 	
 	SetDataFolder dfSave;
 	
@@ -193,7 +210,7 @@ End
 
 //Here we write ten files for each scan relieving the raw waves for acquiring new data.
 Function WriteDataToFile()
-	print  "scan completed. Writing data to file"
+	print  "scan completed. Writing DAQmx data to file"
 	//Call - save data
 
 	Variable i=0;
@@ -214,34 +231,23 @@ End
 Function WriteImageToDisk(index)
 	Variable index
 	
-	String oldSaveFolder = GetDataFolder(1)
+	String dfSave = GetDataFolder(1)
 	SetDataFolder root:packages:ArrayScan
 	
-	SVAR gBaseName
+	SVAR gBaseName, gPathName
 	NVAR gBaseSuffix
+		
 	Wave chosenCant = $("RawCant"+num2str(index))
 	
 	
 	//1. Copy the correct contents of the raw wave into the trace and retrace waves
 	Variable scanpoints = DimSize(chosenCant, 0)/2.5;
 	Variable scanlines = DimSize(chosenCant, 1)
-	Make/N=(scanpoints,scanlines) Trace, Retrace
+	Make/O/N=(scanpoints,scanlines) Trace, Retrace
 	
-	Variable i=0;
-	Variable j=0;
-	Variable start = 0.125*scanpoints;
-	for(i=start; i<1.125*scanpoints; i=i+1)
-		for(j=0; i<scanlines; j=j+1)
-			Trace[i-start][j] = chosenCant[i][j]
-		endfor
-	endfor
-	start = 1.375*scanpoints
-	for(i=start; i<2.375*scanpoints; i=i+1)
-		for(j=0; i<scanlines; j=j+1)
-			Retrace[i-start][j] = chosenCant[i][j]
-		endfor
-	endfor
-	
+	Duplicate/O/R=(0.125*scanpoints,1.125*scanpoints-1) chosenCant, Trace
+	Duplicate/O/R=(1.375*scanpoints,2.375*scanpoints-1) chosenCant, Retrace
+		
 	//2. Get the correct name of the file
 	String filesuffix =""
 	if(gBaseSuffix < 10)
@@ -249,12 +255,19 @@ Function WriteImageToDisk(index)
 	else
 		filesuffix = "00" + num2str(gBaseSuffix);
 	endif
-	String basefilename = gBaseName + filesuffix + "_C" + num2str(index+1) + "_";
-	
+	String basefilename = gBaseName + "_" + filesuffix + "_C" + num2str(index+1) + "_";
+		
 	//3. write to file
-		// O - overwrite ok, J - tab limted, W - save wave name
-	Save /O/J/W Trace as (basefilename + "T.dat")
-	Save /O/J/W Retrace as (basefilename + "R.dat")
+		//Flags:
+		// /C:	The folder specified by "path" is created if it does not already exist.
+		// /O	Overwrites the symbolic path if it exists.
+		// /Q	Suppresses printing path information in the history
+		// /Z	Doesn't generate an error if the folder does not exist.
+	NewPath/O/Q/C Path1, gPathName
+
+		// O - overwrite ok, J - tab limted
+	Save /O/J/P=Path1 Trace as (basefilename + "T.txt")
+	Save /O/J/P=Path1 Retrace as (basefilename + "R.txt")
 	
 	//4. Wipe out the old raw wave and create a fresh one in its place
 		// probably is unnecessary
@@ -271,6 +284,10 @@ End
 ///////////////////////////////////////////// ANCILLARY FUNCTIONS   /////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+Function searchForDAQs()
+	print fDAQmx_DeviceNames()
+End
+
 Function CopyMyWave(newname)
 	String NewName
 	
@@ -286,6 +303,17 @@ function My2DArray()
 	for(xx=0;xx<3;xx = xx+1)
 		for(yy=0;yy<3;yy= yy+1)	
 			mydata[xx][yy] = xx + yy
+		endfor							
+	endfor	
+end
+
+function MakeFakeImage()
+	Variable xx = 0
+	Variable yy = 0
+	Make/O /N=(256*2.5,256) /D RawCant4
+	for(xx=0;xx<256*2.5;xx = xx+1)
+		for(yy=0;yy<256;yy= yy+1)	
+			RawCant4[xx][yy] = xx + yy
 		endfor							
 	endfor	
 end
@@ -368,44 +396,6 @@ Function TwoChannelScan()
 	SetDataFolder dfSave;
 	
 End //TwoChannelScan end
-
-// Thus function will be called by the UserCalculated.ipf function
-// Gives a little more freedom in portability of the data filtering code
-Function UserCalcInterfaceOLD(RowIndex,ColIndex)
-	
-	Variable RowIndex, ColIndex
-	
-	//Here we can grab the important data from the raw waves 
-	// and place it in the waves
-	// One obvious problem is how the subsequent frames are going to be stored
-	// Need to think about using Wave handles and indices and naming waves on the go
-	
-	String dfSave = getDataFolder(1)
-	
-	SetDataFolder root:Packages:ArrayScan
-	NVAR gDisplayCant
-		
-	Wave RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
-	
-	Variable retValue = gDisplayCant
-	
-	if(gDisplayCant == 1)
-		retValue = RawCant0[RowIndex][ColIndex]
-	elseif(gDisplayCant == 2)
-		retValue = RawCant1[RowIndex][ColIndex]
-	elseif(gDisplayCant == 3)
-		retValue = RawCant2[RowIndex][ColIndex]
-	elseif(gDisplayCant == 4)
-		retValue = RawCant3[RowIndex][ColIndex]
-	else
-		retValue = RawCant4[RowIndex][ColIndex]
-	endif
-	
-	SetDataFolder dfSave;
-	
-	return retValue
-
-End // End function UserCalcInterface
 
 Function insertDataIntoIBW()
 	// 1. Cause a click in "Extract Layer"
