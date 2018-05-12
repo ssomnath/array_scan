@@ -5,9 +5,11 @@
 /////////////////////////////////////////////////////// VERSION LOG ////////////////////////////////////////////////////////////////////////////////
 
 //-----version 2.1---------
-// Slightly automated the insertion into ibw process
-// Code grabs the displayed gAveraging and averages the image itself
-// Layer must be created / inserted and kept ready for overwriting.
+// Cosmetic cleanup + comments + minor code upgrades
+// variable number of channels
+// Renamed name of panel. Affects Array Interfacer in ScanMaster
+// Renamed instances of cantilever and array to DAQ specific
+// Handed over to Juan for further improvements
 
 //-----version 2.0---------
 // Realtime display shows averaging
@@ -35,28 +37,41 @@
 // time lag between the DAQ data acquisition and the scan start has been eliminated.
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////// PENDING TASKS   /////////////////////////////////////////////////////////////////////// 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Pending tasks:
 // Top Priority:
+// -------------------
+// 1. Realtime window doesn't display after first scan. Data is still being saved just fine
+// 2. If oversampling, write DECIMATED data to file
+// 3. Check scan - DAQ acquisition timing. seems a bit off now. was fine before
 
+// Medium Priority:
+// -------------------
+// 1. For safety, disable the Number of channels from being edited whie scanning
+// 2. Display channel index must always <= number of channels to prevent outofBounds exception
+// 3. Not tested for usecase of user not wanting to acquire data using DAQ. Should not be a problem since data
+//	is probably acquired only if the Array Scan Panel is opened.
 
 // Low Priority
-// 1. Learn how to get some data into an existing ibw file. 
+// -------------------
+// 1. Can provide a 16 row long list of channel configs for user: 1) DAQ port to which cable is connected, 2) Custom name for channel
+
 
 // Tips:
-// MakePAnel("ARHack")
+// MakePanel("ARHack")
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Menu "UIUC"
-	"Array Scan", ArrayScanDriver()
+	"NI DAQ Acquisition", NIDAQScanDriver()
 End
 
-Function ArrayScanDriver()
+Function NIDAQScanDriver()
 	
 	// If the panel is already created, just bring it to the front.
-	DoWindow/F ArrayScanPanel
+	DoWindow/F NIDAQacqPanel
 	if (V_Flag != 0)
 		return 0
 	endif
@@ -64,7 +79,7 @@ Function ArrayScanDriver()
 	String dfSave = GetDataFolder(1)
 	
 	// Create a data folder in Packages to store globals.
-	NewDataFolder/O/S root:packages:ArrayScan
+	NewDataFolder/O/S root:packages:NIDAQacq
 	
 	String pathname = StrVarOrDefault(":gPathName","C:Documents and Settings:somnath2:Desktop:RealTimeDataCapture:");
 	String/G gPathName = pathname
@@ -75,55 +90,58 @@ Function ArrayScanDriver()
 	Variable baseSuffix = NumVarOrDefault(":gBaseSuffix",0);
 	Variable/G gBaseSuffix = baseSuffix
 	
-	Variable avging = NumVarOrDefault(":gAveraging",8)
+	Variable avging = NumVarOrDefault(":gAveraging",1)
 	Variable/G gAveraging = avging
 	
-	Variable displayCant = NumVarOrDefault(":gDisplayCant",1)
-	Variable/G gDisplayCant = displayCant
+	Variable displayChan = NumVarOrDefault(":gDisplayChan",1)
+	Variable/G gDisplayChan = displayChan
+	
+	Variable numChans = NumVarOrDefault(":gnumChans",5)
+	Variable/G gnumChans = numChans
 	
 	setupARCallbackHacks()
 	HackRealTimeNamePanel()
 	
-	DoAlert 0, "Enable UserCalculated function: ArrayUserCalc"
+	DoAlert 0, "Uncomment relavent code in UserCalculated function: NIDAQRealTimeDisplay"
 	
-	Execute "ArrayScanPanel()"
+	DoAlert 0, "Make sure DAQ is plugged in"
+	
+	Execute "NIDAQacqPanel()"
 	
 	SetDataFolder dfSave
 End
 
-Window ArrayScanPanel(): Panel
+Window NIDAQacqPanel(): Panel
 	
 	PauseUpdate; Silent 1		// building window...
-	NewPanel /K=1 /W=(485,145, 765,450) as "Array Scan Panel"
+	NewPanel /K=1 /W=(485,145, 675,385) as "NI DAQ Acquisition"
 	SetDrawLayer UserBack
 	
-	SetVariable sv_PathName,pos={17,14},size={242,25},title="File Path"
-	SetVariable sv_PathName, value=root:Packages:ArrayScan:gPathName	
+	SetVariable sv_PathName,pos={17,14},size={160,25},title="File Path"
+	SetVariable sv_PathName, value=root:Packages:NIDAQacq:gPathName	
 	
-	SetVariable sv_ImageBaseName,pos={17,46},size={242,25},title="Base Name"
-	SetVariable sv_ImageBaseName, value=root:Packages:ArrayScan:gBaseName	
+	SetVariable sv_ImageBaseName,pos={17,46},size={160,25},title="Base Name"
+	SetVariable sv_ImageBaseName, value=root:Packages:NIDAQacq:gBaseName	
 	
 	SetVariable sv_ImageOffset,pos={17,78},size={115,25},title="Base Suffix", limits={0,100,1}
-	SetVariable sv_ImageOffset,value=root:Packages:ArrayScan:gBaseSuffix
+	SetVariable sv_ImageOffset,value=root:Packages:NIDAQacq:gBaseSuffix
 	
-	SetVariable sv_DisplayCant,pos={17,109},size={151,25},title="Display Cantilever", limits={1,5,1}
-	SetVariable sv_DisplayCant, value=root:Packages:ArrayScan:gDisplayCant
+	SetVariable sv_numChans,pos={17,110},size={151,25},title="Number of Channels", limits={1,16,1}
+	SetVariable sv_numChans, value=root:Packages:NIDAQacq:gNumChans
+	
+	SetVariable sv_DisplayChan,pos={17,143},size={151,25},title="Display Channel", limits={1,5,1}
+	SetVariable sv_DisplayChan, value=root:Packages:NIDAQacq:gDisplayChan
 
-	SetVariable sv_Averaging,pos={17,140},size={115,25},title="Averaging", limits={0,100,1}
-	SetVariable sv_Averaging, value=root:Packages:ArrayScan:gAveraging
-	
-	DrawText 16, 205, "Insert data into ibw:"
-	
-	SetVariable SV_name,pos={16,215},size={242,25},title="Image Name", disable=2
-	SetVariable SV_name,value= root:packages:MFP3D:Main:Display:LastTitle,live= 1
-	
-	Button bt_overwrite,pos={17,246},size={242,25},title="Browse for txt file & overwrite Img layer", proc=OverwriteLayer
+	SetVariable sv_Averaging,pos={17,176},size={115,25},title="Averaging", limits={0,100,1}
+	SetVariable sv_Averaging, value=root:Packages:NIDAQacq:gAveraging
 	
 	SetDrawEnv fstyle= 1 
 	SetDrawEnv textrgb= (0,0,65280)
-	DrawText 102, 292, "Suhas Somnath, UIUC 2010"
+	DrawText 16, 232, "Suhas Somnath, UIUC 2010"
 End	
 
+// These function calls allow our functions to be called upon an event / trigger - such as start of next scan, end of scan, etc.
+// DONT touch these
 Function setupARCallbackHacks()
 
 	// MakePanelProc("ARCallbackPanelButton_1")
@@ -138,6 +156,8 @@ Function setupARCallbackHacks()
 	ARCallbackSetVarFunc("ARUserCallbackImageDoneSetVar_1",NaN,"StopAcquiringData","GeneralVariablesDescription[%ARUserCallbackImageDone][%Description]")//LastScan
 End
 
+// Here we stop asking our functions from being executed upon previously requested triggers.
+// DONT touch these
 Function cleanupARHacks()
 	ARCheckFunc("ARUserCallbackMasterCheck_1",0)
 	//ARCheckFunc("ARUserCallbackImageGoCheck_1",0)
@@ -145,14 +165,17 @@ Function cleanupARHacks()
 	ARCheckFunc("ARUserCallbackImageDoneCheck_1",0)
 End
 
+// No modification necessary here
 Function ContinueScanning()
 	WriteDataToFile()
+	//print "files written! going to restart acquisition"
 	restartAcquisition()
 	
 	//fDAQmx_ScanStop("Dev1")
 	//StartDataAcquisition()
 End
 
+// Called for each subsequent frame of the scan
 Function restartAcquisition()
 	// Try restarting DAQ scan now
 	// Scanning is supposed to be continuous so theoretically this is the right place
@@ -160,19 +183,51 @@ Function restartAcquisition()
 	
 	fDAQmx_ScanStop("Dev1")
 	// StartDataAcquisition()
-	String dfSave = getDataFolder(1)
-	SetDataFolder root:Packages:ArrayScan
-	//Wave RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
-	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
-	SetDataFolder dfSave;
-	print "DAQ scan restarted"
+	//print "fDAQmx_ScanStop called"
+	
+	
+	StartAcquiringData()
+	
+
+	print "End of RestartAcquisition() END of CALLBACK"
 End
 
+// No modification necessary here
 Function StopAcquiringData()
 	// Only after last scan.
-	print "DAQmx stopped acquiring data -> Last scan"
+	//print "DAQmx stopped acquiring data -> Last scan"
 	fDAQmx_ScanStop("Dev1")
 	WriteDataToFile()
+End
+
+Function StartAcquiringData()
+	
+	String dfSave = getDataFolder(1)
+	SetDataFolder root:Packages:NIDAQacq
+	
+	NVAR gnumChans
+	
+	SetDataFolder dfSave;
+	
+	String waveAssignments = "";
+	
+	//Variable numWaves=5; // Replace with global: gNumChans
+	Variable i;
+	
+	for(i=0;i<gnumChans;i=i+1)
+		waveAssignments = waveAssignments+"RawChan"+num2str(i)+", " + num2str(i)+";";
+	endfor
+	
+	// waveAssignments = "RawChan0, 0; RawChan1, 1;RawChan2, 2; RawChan3, 3;RawChan4, 4;"
+	
+	// This is the main DAQ command that starts a fresh data acquistion. 
+	// DAQmx_Scan/Dev="device number - 1 for our case since we only use one DAQ
+	// BKG WAVES = "WaveName, DAQchannelNumber;.......
+	print "StartAcquiringData() called"
+	//DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawChan0, 0; RawChan1, 1;";AbortOnRTE
+	DAQmx_Scan/DEV="Dev1"/BKG WAVES=waveAssignments;AbortOnRTE
+	print "DAQmx_Scan called"
+
 End
 
 Function StartDataAcquisition()
@@ -187,8 +242,8 @@ Function StartDataAcquisition()
 	
 	String dfSave = getDataFolder(1)
 	
-	NewDataFolder/O/S root:Packages:ArrayScan
-	NVAR gAveraging
+	SetDataFolder root:Packages:NIDAQacq
+	NVAR gAveraging, gnumChans
 	
 	if(gAveraging > 100 || gAveraging < 0)
 		gAveraging = 1;
@@ -197,32 +252,44 @@ Function StartDataAcquisition()
 	Variable SampleTime = 1/(ScanRate*2.5*ScanPoints*gAveraging)
 	// When Averaging is enabled, the sampleNum will be multiplied by that.
 	Variable SampleNum	= 2.5*ScanPoints*gAveraging
-			
-	//Redimension/N=(0) RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
-	Make/O/N=(SampleNum,ScanLines) RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
 	
-	SetScale/P x, 0,SampleTime, "s", RawCant0, RawCant1, RawCant2, RawCant3, RawCant4
+	//Make/O/N=(SampleNum,ScanLines) RawChan0, RawChan1, RawChan2, RawChan3, RawChan4
+	//SetScale/P x, 0,SampleTime, "s", RawChan0, RawChan1, RawChan2, RawChan3, RawChan4
+	
+	Variable i;
+	for(i=0;i<gnumChans;i=i+1)
+		Make/O/N=(SampleNum,ScanLines) $("RawChan"+num2str(i));
+		SetScale/P x, 0,SampleTime, "s", $("RawChan"+num2str(i));
+	endfor
+	
+	StartAcquiringData()
 		
-	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0; RawCant1, 1;RawCant2, 2; RawCant3, 3;RawCant4, 4;";AbortOnRTE
-	
-	print "DAQmx Data acquisition started"
+	//print "DAQmx Data acquisition started"
 	
 	SetDataFolder dfSave;
 	
 End
 
-// Thus function will be called by the UserCalculated.ipf function
+
+
+// This function will be called by the UserCalculated.ipf function
 // Gives a little more freedom in portability of the data filtering code
+// Do minimal work in this function
 Function UserCalcInterface(RowIndex,ColIndex)
 	
 	Variable RowIndex, ColIndex
 		
 	String dfSave = getDataFolder(1)
 	
-	SetDataFolder root:Packages:ArrayScan
-	NVAR gDisplayCant, gAveraging
+	SetDataFolder root:Packages:NIDAQacq
+	NVAR gDisplayChan, gAveraging, gnumChans
 	
-	Wave chosenCant = $("RawCant"+num2str(gDisplayCant-1))
+	// Very ineligant: 
+	// This should run only once per user change in either variables not once per pixel
+	// Use a function for the setvars to ensure that the display channel will always be < gNumChans
+	gDisplayChan = min(gDisplayChan,gnumChans);
+	
+	Wave chosenChan= $("RawChan"+num2str(gDisplayChan-1))
 	
 	// Average here:
 	// This is slow because it has to be done in realtime
@@ -230,91 +297,127 @@ Function UserCalcInterface(RowIndex,ColIndex)
 	Variable i=0;
 	Variable total = 0;
 	for(i=gAveraging*Rowindex; i<gAveraging*(RowIndex+1); i=i+1)
-		total = total + chosenCant[i][ColIndex]
+		total = total + chosenChan[i][ColIndex]
 	endfor
 	
 	Variable retValue = total/gAveraging
 	
 	SetDataFolder dfSave;
 	
-	return retValue
+	return retValue;//chosenChan[Rowindex][ColIndex]
 
 End // End function UserCalcInterface
 
+
+// This function sets up the software to display one channel of information in realtime
 Function HackRealTimeNamePanel()
 
-	Variable popnum = WhichListItem("ArrayUserCalc", GetUserCalculatedFuncList())
+	Variable popnum = WhichListItem("NIDAQRealTimeDisplay", GetUserCalculatedFuncList())
 
 	if(popnum < 0)
 		// Such a function does not exist or is already chosen?
-		DoAlert 0, "ArrayUserCalc funciton not found in UserCalculated.ipf";
+		DoAlert 0, "NIDAQRealTimeDisplay funciton not found in UserCalculated.ipf";
 		return -1;
 	endif
 	
-	// Select ArrayUserCalc:
-	ChannelPopFunc("UserCalcFuncPop_0",PopNum+1,"ArrayUserCalc")
+	// Select NIDAQRealTimeDisplay:
+	ChannelPopFunc("UserCalcFuncPop_0",PopNum+1,"NIDAQRealTimeDisplay")
 	
-	//Give this a Name
-	// Can also include the cantilever number but what if the number changes inbetween for the same window?
-	UserChannelNameFunc("UserCalcName_0",NaN,"Array","GlobalStrings[%UserCalcName][%Value]")
+	UserChannelNameFunc("UserCalcName_0",NaN,"NIDAQ","GlobalStrings[%UserCalcName][%Value]")
 	
 	//Set the Units to Volts:
-	SetChannelUnitSetVarFunc("UserCalcUnitSetVar_0",NaN,"V","GlobalStrings[%UserCalcUnit][%Value]")
-	
+	PS(ARConvertVarName2ParmName("GlobalStrings[%UserCalcUnit][%Value]"),"V")
+		
 	//Now set up the UserCalcWindow
-	popnum = WhichListItem("Array", DataTypeFunc(5))
-	if(popnum < 0)
-		// Array already being displayed
-		// dont bother
-		return -1
+	setUpNIDAQacqWindow()
+	
+	// Was annoying and popped up each time
+	KillWindow RealTimeNamePanel
+
+End
+
+// This function sets up the actual window that will be used to dispaly the data
+Function setUpNIDAQacqWindow()
+
+	Variable chanIndx = 1;
+	Variable freeChan = 6;
+	for(chanIndx =1; chanIndx<6; chanIndx=chanIndx+1)
+		if( WhichListItem("NIDAQ", DataTypeFunc(chanindx))==0)
+			//print "Channel for NIDAQ found on channel number " + num2str(chanindx)
+			break;
+		elseif( WhichListItem("Off", DataTypeFunc(chanindx))==0)
+			//print "NIDAQ not set up but Channel #" + num2str(chanindx) + " is available"
+			freeChan = min(freeChan, chanIndx)
+		endif
+	Endfor
+	// Case 1 - NIDAQ already present. chanIndx already set. Don't do anything now
+	
+	if(chanIndx > 5)
+		// Case 2 - Userin0 NOT already present but empty channel available
+		if(freeChan < 5)
+			chanIndx = freeChan
+		else
+		// Case 3 - NIDAQ NOT present and all channels taken. FORCE last channel with message (Unlikely)
+			chanIndx = 5;
+			DoAlert 0,"No empty channels found\nOverriding Channel 5 to display NIDAQ"
+		endif
 	endif
-	SetDataTypePopupFunc("Channel5DataTypePopup_5",popNum,"Array") // sets the channel acquired into the graph:
-	SetPlanefitPopupFunc("Channel5RealPlanefitPopup_5",4,"Masked Line") // for the live flatten
-	SetPlanefitPopupFunc("Channel5SavePlanefitPopup_5",4,"Flatten 0") // for the save flatten
-	//ShowWhatPopupFunc("Channel5CapturePopup_5",4,"Both")
+	
+	// By now, a channel has been decided for NIDAQ. Just configure it.
+	Variable popnum = WhichListItem("NIDAQ", DataTypeFunc(5))
+	
+	SetDataTypePopupFunc("Channel" + num2str(chanIndx) + "DataTypePopup_" + num2str(chanIndx) ,popNum,"NIDAQ") // sets the channel acquired into the graph:
+	SetPlanefitPopupFunc("Channel" + num2str(chanIndx) + "RealPlanefitPopup_" + num2str(chanIndx),4,"Masked Line") // for the live flatten
+	SetPlanefitPopupFunc("Channel" + num2str(chanIndx) + "SavePlanefitPopup_" + num2str(chanIndx),1,"None") // for the save flatten
+	ShowWhatPopupFunc("Channel" + num2str(chanIndx) + "CapturePopup_" + num2str(chanIndx),4,"Both")
+	//SetChannelColorMap("Channel" + num2str(chanIndx) + "1ColorMapPopup_" + num2str(chanIndx),29,"VioletOrangeYellow")
 
 End
 
 //Here we write ten files for each scan relieving the raw waves for acquiring new data.
+// You need to make this dynamic such that you write as many files as the user requests.
 Function WriteDataToFile()
-	print  "scan completed. Writing DAQmx data to file"
+	//print  "scan completed. Writing DAQmx data to file"
 	//Call - save data
-
-	Variable i=0;
-	
-	for(i=0; i<5; i=i+1)
-		WriteImageToDisk(i)	
-	endfor
 	
 	// Increase the scan index
 	String dfSave = getDataFolder(1)
-	SetDataFolder root:Packages:ArrayScan
-	NVAR gBaseSuffix
-	gBaseSuffix = gBaseSuffix+1;
+	SetDataFolder root:Packages:NIDAQacq
+	NVAR gBaseSuffix, gNumChans
 	SetDataFolder dfSave;
+
+	Variable i=0;
+	
+	for(i=0; i<gNumChans; i=i+1)
+		WriteImageToDisk(i)	
+	endfor
+	
+	
+	gBaseSuffix = gBaseSuffix+1;
 
 End
 
+// This function writes each channel's trace and retrace to text files
 Function WriteImageToDisk(index)
 	Variable index
 	
 	String dfSave = GetDataFolder(1)
-	SetDataFolder root:packages:ArrayScan
+	SetDataFolder root:packages:NIDAQacq
 	
 	SVAR gBaseName, gPathName
 	NVAR gBaseSuffix//, gAveraging
 		
-	Wave chosenCant = $("RawCant"+num2str(index))
+	Wave chosenChan = $("RawChan"+num2str(index))
 	
 	
 	//1. Copy the correct contents of the raw wave into the trace and retrace waves
-	Variable scanpoints = DimSize(chosenCant, 0)/(2.5)//*gAveraging);
-	Variable scanlines = DimSize(chosenCant, 1)
+	Variable scanpoints = DimSize(chosenChan, 0)/(2.5)//*gAveraging);
+	Variable scanlines = DimSize(chosenChan, 1)
 	
 	Make/O/N=(scanpoints,scanlines) Trace, Retrace
 	
-	Duplicate/O/R=[0.125*scanpoints,1.125*scanpoints-1]chosenCant, Trace
-	Duplicate/O/R=[1.375*scanpoints,2.375*scanpoints-1] chosenCant, Retrace
+	Duplicate/O/R=[0.125*scanpoints,1.125*scanpoints-1]chosenChan, Trace
+	Duplicate/O/R=[1.375*scanpoints,2.375*scanpoints-1] chosenChan, Retrace
 		
 	//2. Get the correct name of the file
 	String filesuffix =""
@@ -340,8 +443,8 @@ Function WriteImageToDisk(index)
 	
 	//4. Wipe out the old raw wave and create a fresh one in its place
 		// probably is unnecessary
-	Redimension /N=(0) chosenCant
-	Redimension /N=(scanpoints*2.5, scanlines) chosenCant
+	Redimension /N=(0) chosenChan
+	Redimension /N=(scanpoints*2.5, scanlines) chosenChan
 	
 	// 5. Kill the trace and retrace temporary waves:
 	killwaves Trace, Retrace
@@ -349,104 +452,34 @@ Function WriteImageToDisk(index)
 	SetDataFolder dfSave
 End 
 
-Function OverwriteLayer(ctrlname): ButtonControl
-	String ctrlname
-	LoadWaveFromDisk()
-	
-	String dfSave = GetDataFolder(1)
-	
-	SetDataFolder root:packages:MFP3D:Main:Display
-	
-	SVAR LastTitle
-	Variable index = strsearch(LastTitle, " ", 0)
-	if(index < 0)
-		DoAlert 0, "No such Image!"
-		return 0;
-	endif
-	
-	String imgname = LastTitle[0,index-1]
-	Variable layernum = -1
-	
-	String GraphName = StringFromList(0,WinList(cOfflineBaseName+"*",";","WIN:1"))	//get the name of the top graph
-	if (strlen(GraphName) == 0)		//anything there?
-		DoAlert 0, "No such Image!"
-		return 0							//nope
-	endif
-	
-	String DataFolder, ImageName
-	GetGraphData(GraphName,DataFolder,ImageName,LayerNum)
-	
-	SetDataFolder dfSave
-	
-	FilterImage(ImageName,Layernum)
-
-End
-
-Function LoadWaveFromDisk()
-	String oldSaveFolder = GetDataFolder(1)
-	setdatafolder root:packages:ArrayScan
-	Variable refNum
-	String outputPath
-	Open /R /Z=2 /M="Select the text file containing the litho coordinates" refNum as ""
-	if(refNum == 0)
-		print "No file was open!"
-		//return -1
-	endif
-	if (V_flag == -1)
-		Print "Open cancelled by user."
-		return -1
-	endif
-	if (V_flag != 0)
-		DoAlert 0, "Error Opening file"
-		return V_flag
-	endif
-	outputPath = S_fileName
-	
-	print outputPath
-	
-	//Unless there is no other wave, this should load the wave as "wave0"
-	//J	Indicates that the file uses the delimited text format
-	//D	Creates double precision waves
-	//M	Loads data as matrix wave.
-	//A	"Auto-name and go" option <- fine for now
-	LoadWave/J/M/D/A=wave/K=0 outputPath
-	
-	SetDataFolder oldSaveFolder
-End
-	
-Function FilterImage(ImgName,Layernum)
-	String ImgName
-	Variable LayerNum
-	String dfSave = GetDataFolder(1)
-	setdatafolder root:packages:ArrayScan
-	
-	// Assume wave to be loaded is  called "wave0"
-	Wave wave0
-	NVAR gAveraging
-	Variable i, j, k, total, scanpoints, scanlines
-	scanpoints = (DimSize(wave0, 0))/gAveraging
-	scanlines = DimSize(wave0, 1)
-	//Make/O/N=(scanpoints,scanlines) cleanedWave
-	SetDataFolder root:Images
-	Wave chosenCant = $(ImgName)
-	for(j=0; j<scanlines; j=j+1)
-		for(i=0; i<scanpoints*gAveraging; i=i+gAveraging)
-			total = 0;
-			for(k=i; k<(i+gAveraging); k=k+1)
-				total = total + wave0[k][j]
-			endfor
-			//cleanedWave[i/gAveraging][j] = total/gAveraging
-			chosenCant[i/gAveraging][j][LayerNum] = total/gAveraging
-		endfor
-	endfor
-	
-	KillWaves  wave0
-	SetDataFolder dfSave
-End
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////// ANCILLARY FUNCTIONS   /////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// This function creates a user-requested number of  waves
+// It also generates a string that can be used for the DAQ setup
+// Using this, it should be possible to provide:
+// 1. custom names to each channel (may be of use when writing to file so that the user know what each file corresponds to)
+// 2. random placement of channels (don't have to be sequantial or continuous)
+// 3. any number of channels dynamically
+Function VarNumWaves(numWaves)
+	Variable numWaves;
+	
+	String waveAssignments = "";
+	
+	Variable i;
+	for(i=0;i<numWaves;i=i+1)
+		Make/O/N=(2,2) $("TestWave"+num2str(i));
+		waveAssignments = waveAssignments+"TestWave"+num2str(i)+", " + num2str(i*5)+";";
+		//BKG WAVES="RawChan0, 0; RawChan1, 1;RawChan2, 2; RawChan3, 3;RawChan4, 4;";AbortOnRTE
+	endfor
+	print waveAssignments;
+	
+	for(i=0;i<numWaves;i=i+1)
+		Wave Temp = $("TestWave"+num2str(i));
+		killwaves Temp
+	endfor
+End
 
 Function CopyMyWave(newname)
 	String NewName
@@ -470,10 +503,10 @@ end
 function MakeFakeImage()
 	Variable xx = 0
 	Variable yy = 0
-	Make/O /N=(256*2.5,256) /D RawCant4
+	Make/O /N=(256*2.5,256) /D RawChan4
 	for(xx=0;xx<256*2.5;xx = xx+1)
 		for(yy=0;yy<256;yy= yy+1)	
-			RawCant4[xx][yy] = xx + yy
+			RawChan4[xx][yy] = xx + yy
 		endfor							
 	endfor	
 end
@@ -484,15 +517,15 @@ Function DAQTestScan()
 
 	Variable errorCode
 	
-	Make/O/N=1000 RawCant0// /O overwrites existing waves
-	SetScale/P x, 0,0.001, "s", RawCant0 
+	Make/O/N=1000 RawChan0// /O overwrites existing waves
+	SetScale/P x, 0,0.001, "s", RawChan0 
 		
-	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawCant0, 0;";AbortOnRTE
+	DAQmx_Scan/DEV="Dev1"/BKG WAVES="RawChan0, 0;";AbortOnRTE
 
 	// keep this sting ready in the command window:
 	//fDAQmx_ScanStop("Dev1")
 	
-	Display RawCant0
+	Display RawChan0
 	
 End //MyScan end
 
@@ -556,28 +589,3 @@ Function TwoChannelScan()
 	SetDataFolder dfSave;
 	
 End //TwoChannelScan end
-
-Function insertDataIntoIBW()
-	// 1. Cause a click in "Extract Layer"
-	// Do the following 5 times
-	//	a. Copy data into root:Images:LayerData (use code from SmartLitho)
-	//	b. Cause a click on the "Do It" button in the Insert layer menu.
-	
-	String dfSave = getDataFolder(1)
-	
-	//ExtractLayer();
-	
-	SetDataFolder root:Packages:ArrayScan
-	Wave RawCant1
-	
-	SetDataFolder root:Images
-	
-	//Replace LayerData with RawCant1
-	Duplicate/O RawCant1, LayerData
-	
-	//Insert the layer:
-	InsertLayerButtonProc("blah")
-	//InsertLayerChoose()
-	
-	SetDataFolder dfSave
-End
